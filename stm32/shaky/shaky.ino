@@ -1,7 +1,7 @@
-/* 
+/*
  *  shaky-town 1884
- *  
- *  References: 
+ *
+ *  References:
  *  - https://github.com/stm32duino/VL53L0X/tree/main/examples
  *  - https://how2electronics.com/wp-content/uploads/2019/02/STM32-Pin-Details.jpg
  *  - https://github.com/vtx22/STM32-WS2812/blob/master/src/LED.cpp
@@ -18,6 +18,11 @@
  *
  * STM32F103C8 overview:
  * 3 × USARTs, 3 × 16-bit timers, 2 × SPIs, 2 × I2Cs, USB, CAN, 1 × PWM timer, 2 × ADCs
+ *
+ * All rights reserved. Distribute under MIT License or ask.
+ *
+ * V0.1 - 2024-06-24, jw - first light.
+ *
  */
 /* Includes ------------------------------------------------------------------*/
 #include <Wire.h>
@@ -50,7 +55,7 @@ class myVL53L0X : public VL53L0X {
      * @param[in] pin shutdown pin to be used as component GPIO0
      */
     myVL53L0X(TwoWire *i2c, int pin): VL53L0X(i2c, pin) {}
-    
+
     // getter
     VL53L0X_DeviceInfo_t *deviceinfo() {
       return &DeviceInfo;
@@ -80,7 +85,7 @@ void setup() {
 
   // Initialize serial for output.
   Serial.begin(115200);
-  
+
   // Initialize I2C bus.
   WIRE1.begin();
 
@@ -101,10 +106,10 @@ void setup() {
     VL53L0X_DeviceInfo_t *di = sensor_vl53l0x.deviceinfo();
     char info[100];
     snprintf(info, sizeof(info), "%s | Type: %s | Prod: %s | Type: %d | Rev: %d, %d",
-      di->Name, di->Type, di->ProductId, 
+      di->Name, di->Type, di->ProductId,
       di->ProductType, di->ProductRevisionMajor, di->ProductRevisionMinor);
     Serial.println(info);
-  }  
+  }
 #endif
 
   // Initialize the NeoPixel strip
@@ -137,7 +142,7 @@ void loop() {
   status = sensor_vl53l0x.GetDistance(&distance);
 
   digitalWrite(LED_PIN, (distance < 400) ? HIGH : LOW);
-    
+
   if (status == VL53L0X_ERROR_NONE)
   {
     // Output data.
@@ -155,5 +160,5 @@ void loop() {
 
   digitalWrite(WS2812_PIN, (blink) ? HIGH : LOW);
   blink = 1 - blink;
-  
+
 }
