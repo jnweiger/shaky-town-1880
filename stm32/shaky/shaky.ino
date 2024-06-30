@@ -228,9 +228,11 @@ uint8_t idle() {
   else if (idle_tick < 6*MOTP) m = 60;
   else if (idle_tick < 7*MOTP) m = 40;
 
+#if 0
   char report[64];
   snprintf(report, sizeof(report), "| idle: %ld | %ld | %d | p=%d", idle_tick, led_step, m, (led_step - 0*LEDP)*100/LEDP);
   Serial.println(report);
+#endif
 
   return m;
 }
@@ -255,17 +257,18 @@ void loop() {
   {
     // Output data.
     char report[64];
-    snprintf(report, sizeof(report), "| Distance [mm]: %ld | %ld |", distance, idle_tick);
-    //Serial.println(report);
+    snprintf(report, sizeof(report), "| Distance [mm]: %ld | %ld |", distance);
+    Serial.println(report);
   }
-  distance = 666;
+  
   uint8_t motor_speed = 60;
 
-  if (distance <  10 && distance > 0) { idle(); motor_speed = 0; }  // cover applied!
-  else if (distance < 200) { fillStrip(strip.Color(255, 100, 100)); idle_tick = 0; motor_speed = 255; } // Red
-  else if (distance < 300) { fillStrip(strip.Color(100, 255, 100)); idle_tick = 0; motor_speed = 170; }
-  else if (distance < 450) { fillStrip(strip.Color(255, 255, 100)); idle_tick = 0; motor_speed = 130; }
-  else if (distance < 600) { fillStrip(strip.Color(255, 255,   0)); idle_tick = 0; motor_speed = 100; } // Yellow
+  if (distance < 10)       { motor_speed = idle(); }  // 0 is infinite. 
+  else if (distance <  50) { idle(); motor_speed = 0; }  // cover applied!
+  else if (distance < 200) { fillStrip(strip.Color(255,   0,   0)); idle_tick = 0; motor_speed = 255; } // Red
+  else if (distance < 300) { fillStrip(strip.Color(255, 145,   0)); idle_tick = 0; motor_speed = 170; } // orange
+  else if (distance < 400) { fillStrip(strip.Color(255, 245,   0)); idle_tick = 0; motor_speed = 130; } // yellow
+  else if (distance < 600) { fillStrip(strip.Color(255, 255, 255)); idle_tick = 0; motor_speed = 100; } // white
   else                     { motor_speed = idle(); }
   analogWrite(MOTOR_PIN, motor_speed);
   digitalWrite(WS2812_PIN, (blink) ? HIGH : LOW);
