@@ -71,7 +71,7 @@ TwoWire WIRE1(2, I2C_FAST_MODE);  // PB11, PB10);
 
 myVL53L0X sensor_vl53l0x(&WIRE1, PB1); //PB12, XSHUT=PC6
 
-uint8_t color_fan[3*3*3*3];	// for fillStrip_3x25()
+uint8_t color_fan[4*3*3*3];	// for fillStrip_3x25()
 
 /* Setup ---------------------------------------------------------------------*/
 // the shipped blink example says the LED pin is PB1
@@ -89,22 +89,29 @@ void setup() {
 #define CFAN(t,y,x, r, g, b) color_fan[3*((t)*9+(y)*3+(x))+0] = r; color_fan[3*((t)*9+(y)*3+(x))+1] = g; color_fan[3*((t)*9+(y)*3+(x))+2] = b
 
 
-#if 0
+#if 1
   // blue, puple
-  CFAN(0,0,0, 100,100,255); CFAN(0,0,1, 255,100,255); CFAN(0,0,2, 100,100,255);  // Kett0
-  CFAN(1,0,0, 255,100,255); CFAN(1,0,1,   0,  0,255); CFAN(1,0,2, 255,100,255); // Kett1
-  CFAN(2,0,0, 255,100,255); CFAN(2,0,1, 127, 50,255); CFAN(2,0,2, 100,100,255); // Kett2
-
-  // yellow red...
-  CFAN(0,1,0, 200,200,  0); CFAN(0,1,1, 255,100,100); CFAN(0,1,2, 200,200,  0);	// Walch0
-  CFAN(1,1,0, 255,100,100); CFAN(1,1,1, 200,200,  0); CFAN(1,1,2, 255,100,100);	// Walch1
-  CFAN(2,1,0, 200,200,  0); CFAN(2,1,1, 235,150, 50); CFAN(2,1,2, 255,100,100);	// Walch2
+  CFAN(0,0,0,  25, 25,255); CFAN(0,0,1, 255,500,255); CFAN(0,0,2,  25, 25,255); // Kett0
+  CFAN(1,0,0,  25, 25,255); CFAN(1,0,1, 255,500,255); CFAN(1,0,2,  25, 25,255); // Kett1
+  CFAN(2,0,0, 255, 50,255); CFAN(2,0,1,   0,  0,255); CFAN(2,0,2, 255, 50,255); // Kett2
+  CFAN(3,0,0, 255, 50,255); CFAN(3,0,1, 255, 50,255); CFAN(3,0,2,  25, 25,255); // Kett3
 #endif
 
+#if 1
+  // yellow red...
+  CFAN(0,1,0, 255,240, 20); CFAN(0,1,1, 255,  0,  0); CFAN(0,1,2, 255,  0,  0);	// Walch0
+  CFAN(1,1,0, 255,  0,  0); CFAN(1,1,1, 255,240,  0); CFAN(1,1,2, 255,  0,  0);	// Walch1
+  CFAN(2,1,0, 255,  0,  0); CFAN(3,1,1, 255,240,  0); CFAN(2,1,2, 255,  0,  0); // Walch2
+  CFAN(3,1,0, 255,  0,  0); CFAN(3,1,1, 255,  0,  0); CFAN(3,1,2, 255,240,  0);	// Walch3
+#endif
+
+#if 1
   // geenish-blue with a hint of purple
-  CFAN(0,2,0, 100,255,100); CFAN(0,2,1, 100,100,255); CFAN(0,2,2, 100,255,100);  // Turm0
+  CFAN(0,2,0, 150,100,200); CFAN(0,2,1, 100,100,200); CFAN(0,2,2, 150,100,200); // Turm0
   CFAN(1,2,0, 100,100,255); CFAN(1,2,1, 100,255,100); CFAN(1,2,2, 100,100,255); // Turm1
-  CFAN(2,2,0, 150,  0,200); CFAN(2,2,1, 100,100, 200); CFAN(2,2,2,150,  0,200); // Turm2
+  CFAN(2,2,0, 100,255,100); CFAN(2,2,1, 100,100,255); CFAN(2,2,2, 100,255,100); // Turm2
+  CFAN(3,2,0, 100,255,100); CFAN(3,2,1, 100,100,255); CFAN(3,2,2, 100,255,100); // Turm3
+#endif
 
   pinMode(MOTOR_PIN, OUTPUT);
   analogWrite(MOTOR_PIN, 100);    // range 0 .. 255 with analogWrite()
@@ -176,17 +183,18 @@ void interpol9col(uint8_t idx1, uint8_t idx2, uint8_t perc, uint32_t *colorp) {
   uint8_t *f1 = &color_fan[9*3*idx1];
   uint8_t *f2 = &color_fan[9*3*idx2];
 
+
   uint8_t r, g, b;
   for (int i = 0; i < 9; i++) {
-#if 0    
-    r = (int)(0.01 * (100-perc) * f1[3*i+0] + perc * f2[3*i+0]);
-    g = (int)(0.01 * (100-perc) * f1[3*i+1] + perc * f2[3*i+1]);
-    b = (int)(0.01 * (100-perc) * f1[3*i+2] + perc * f2[3*i+2]);
+#if 1
+    r = (int)( ((100-perc) * f1[3*i+0] + perc * f2[3*i+0]) * 0.01);
+    g = (int)( ((100-perc) * f1[3*i+1] + perc * f2[3*i+1]) * 0.01);
+    b = (int)( ((100-perc) * f1[3*i+2] + perc * f2[3*i+2]) * 0.01);
 #else
     // not interpolating, just idx1
-    r = f1[3*i+0];
-    g = f1[3*i+1];
-    b = f1[3*i+2];
+    r = f2[3*i+0];
+    g = f2[3*i+1];
+    b = f2[3*i+2];
 #endif
     colorp[i] = strip.Color(r, g, b);
   }
@@ -200,12 +208,13 @@ uint8_t idle() {
 
   uint32_t colors[9];
 
-  if (idle_tick >= 3*LEDP) idle_tick = 0;
+  if (idle_tick >= 4*LEDP) idle_tick = 0;
   
   uint32_t led_step = idle_tick;
   if      (led_step < 1*LEDP) interpol9col(0, 1, (led_step - 0*LEDP)*100/LEDP, &colors[0]);
   else if (led_step < 2*LEDP) interpol9col(1, 2, (led_step - 1*LEDP)*100/LEDP, &colors[0]);
-  else if (led_step < 3*LEDP) interpol9col(2, 0, (led_step - 2*LEDP)*100/LEDP, &colors[0]);
+  else if (led_step < 3*LEDP) interpol9col(2, 3, (led_step - 2*LEDP)*100/LEDP, &colors[0]);
+  else if (led_step < 4*LEDP) interpol9col(3, 0, (led_step - 3*LEDP)*100/LEDP, &colors[0]);
   
   fillStrip_3x25(colors);
   // idle_tick counts to 30 * 4 = 120;
@@ -220,7 +229,7 @@ uint8_t idle() {
   else if (idle_tick < 7*MOTP) m = 40;
 
   char report[64];
-  snprintf(report, sizeof(report), "| idle: %ld | %ld | %d", idle_tick, led_step, m);
+  snprintf(report, sizeof(report), "| idle: %ld | %ld | %d | p=%d", idle_tick, led_step, m, (led_step - 0*LEDP)*100/LEDP);
   Serial.println(report);
 
   return m;
