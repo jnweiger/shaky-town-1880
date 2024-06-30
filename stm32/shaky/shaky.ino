@@ -88,20 +88,23 @@ void setup() {
   // t is time
 #define CFAN(t,y,x, r, g, b) color_fan[3*((t)*9+(y)*3+(x))+0] = r; color_fan[3*((t)*9+(y)*3+(x))+1] = g; color_fan[3*((t)*9+(y)*3+(x))+2] = b
 
-  // geenish-blue with a hint of purple
-  CFAN(0,0,0, 100,255,100); CFAN(0,0,1, 100,100,255); CFAN(0,0,2, 100,255,100);	// Turm0
-  CFAN(1,0,0, 100,100,255); CFAN(1,0,1, 100,255,100); CFAN(1,0,2, 100,100,255);	// Turm1
-  CFAN(2,0,0, 200,  0,200); CFAN(2,0,1, 200,100,  0); CFAN(2,0,2, 200,  0,200);	// Turm2
+
+#if 0
+  // blue, puple
+  CFAN(0,0,0, 100,100,255); CFAN(0,0,1, 255,100,255); CFAN(0,0,2, 100,100,255);  // Kett0
+  CFAN(1,0,0, 255,100,255); CFAN(1,0,1,   0,  0,255); CFAN(1,0,2, 255,100,255); // Kett1
+  CFAN(2,0,0, 255,100,255); CFAN(2,0,1, 127, 50,255); CFAN(2,0,2, 100,100,255); // Kett2
 
   // yellow red...
   CFAN(0,1,0, 200,200,  0); CFAN(0,1,1, 255,100,100); CFAN(0,1,2, 200,200,  0);	// Walch0
   CFAN(1,1,0, 255,100,100); CFAN(1,1,1, 200,200,  0); CFAN(1,1,2, 255,100,100);	// Walch1
   CFAN(2,1,0, 200,200,  0); CFAN(2,1,1, 235,150, 50); CFAN(2,1,2, 255,100,100);	// Walch2
+#endif
 
-  // blue, puple
-  CFAN(0,2,0, 100,100,255); CFAN(0,2,1, 255,100,255); CFAN(0,2,2, 100,100,255);	// Walch0
-  CFAN(1,2,0, 255,100,255); CFAN(1,2,1,   0,  0,255); CFAN(1,2,2, 255,100,255);	// Walch1
-  CFAN(2,2,0, 255,100,255); CFAN(2,2,1, 127, 50,255); CFAN(2,2,2, 100,100,255);	// Walch2
+  // geenish-blue with a hint of purple
+  CFAN(0,2,0, 100,255,100); CFAN(0,2,1, 100,100,255); CFAN(0,2,2, 100,255,100);  // Turm0
+  CFAN(1,2,0, 100,100,255); CFAN(1,2,1, 100,255,100); CFAN(1,2,2, 100,100,255); // Turm1
+  CFAN(2,2,0, 150,  0,200); CFAN(2,2,1, 100,100, 200); CFAN(2,2,2,150,  0,200); // Turm2
 
   pinMode(MOTOR_PIN, OUTPUT);
   analogWrite(MOTOR_PIN, 100);    // range 0 .. 255 with analogWrite()
@@ -152,8 +155,8 @@ void fillStrip_3x25(uint32_t *colors) {
     col_idx++;
     for (int i = 0; i < 8; i++) strip.setPixelColor(led_idx++, colors[col_idx]);
     col_idx++;
-    }
   }
+  strip.show();
 }
 
 // Function to fill the strip with a single color
@@ -169,44 +172,57 @@ void fillStrip(uint32_t color) {
 int blink = 0;
 uint16_t idle_tick = 0;	// state machine.
 
-interpol9col(uint8_t idx1, uint8_t idx2, uint8_t perc, uint32_t *colorp) {
+void interpol9col(uint8_t idx1, uint8_t idx2, uint8_t perc, uint32_t *colorp) {
   uint8_t *f1 = &color_fan[9*3*idx1];
   uint8_t *f2 = &color_fan[9*3*idx2];
 
   uint8_t r, g, b;
   for (int i = 0; i < 9; i++) {
+#if 0    
     r = (int)(0.01 * (100-perc) * f1[3*i+0] + perc * f2[3*i+0]);
     g = (int)(0.01 * (100-perc) * f1[3*i+1] + perc * f2[3*i+1]);
     b = (int)(0.01 * (100-perc) * f1[3*i+2] + perc * f2[3*i+2]);
+#else
+    // not interpolating, just idx1
+    r = f1[3*i+0];
+    g = f1[3*i+1];
+    b = f1[3*i+2];
+#endif
     colorp[i] = strip.Color(r, g, b);
   }
 }
 
-#define MOTOR_IDLE_SCALE 30
-#define LED_IDLE_SCALE_SHIFT 4
-#define LED_IDLE_SCALE (1<<(LED_IDLE_SCALE_SHIFT))
+#define LEDP 30
+#define MOTP 3
 
 uint8_t idle() {
   uint8_t m = 0;
 
   uint32_t colors[9];
 
-  uint32_t led_step = idle_tick >> LED_IDLE_SCALE_SHIFT;
-  if      (led_step < 100) interpol9col(0, 1, led_step - 0*100, &color);
-  else if (led_step < 200) interpol9col(1, 2, led_step - 1*100, &color);
-  else if (led_step < 300) interpol9col(2, 0, led_step - 2*100, &color);
-  else
-     idle_tick = 0;
-
-  // idle_tick counts to 300 * 16 = 4800;
-  // motor pulse goes to 50 * 30 = 1500 -> so ca 1/3 the time its moving.
+  if (idle_tick >= 3*LEDP) idle_tick = 0;
+  
+  uint32_t led_step = idle_tick;
+  if      (led_step < 1*LEDP) interpol9col(0, 1, (led_step - 0*LEDP)*100/LEDP, &colors[0]);
+  else if (led_step < 2*LEDP) interpol9col(1, 2, (led_step - 1*LEDP)*100/LEDP, &colors[0]);
+  else if (led_step < 3*LEDP) interpol9col(2, 0, (led_step - 2*LEDP)*100/LEDP, &colors[0]);
+  
+  fillStrip_3x25(colors);
+  // idle_tick counts to 30 * 4 = 120;
+  // motor pulse goes to 7 * 3 = 21 -> so ca 1/6 the time its moving.
 
   // slow motor pulse
-  if      (idle_tick < 10 * MOTOR_IDLE_SCALE) m = 60;
-  else if (idle_tick < 20 * MOTOR_IDLE_SCALE) m = 90;
-  else if (idle_tick < 30 * MOTOR_IDLE_SCALE) m = 120;
-  else if (idle_tick < 40 * MOTOR_IDLE_SCALE) m = 90;
-  else if (idle_tick < 50 * MOTOR_IDLE_SCALE) m = 60;
+  if      (idle_tick < 1*MOTP) m = 60;
+  else if (idle_tick < 2*MOTP) m = 90;
+  else if (idle_tick < 4*MOTP) m = 120; // twice as long
+  else if (idle_tick < 5*MOTP) m = 90;
+  else if (idle_tick < 6*MOTP) m = 60;
+  else if (idle_tick < 7*MOTP) m = 40;
+
+  char report[64];
+  snprintf(report, sizeof(report), "| idle: %ld | %ld | %d", idle_tick, led_step, m);
+  Serial.println(report);
+
   return m;
 }
 
@@ -230,19 +246,18 @@ void loop() {
   {
     // Output data.
     char report[64];
-    snprintf(report, sizeof(report), "| Distance [mm]: %ld |", distance);
-    Serial.println(report);
+    snprintf(report, sizeof(report), "| Distance [mm]: %ld | %ld |", distance, idle_tick);
+    //Serial.println(report);
   }
-
-  uint8_t motor_speed = 60:
+  distance = 666;
+  uint8_t motor_speed = 60;
 
   if (distance <  10 && distance > 0) { idle(); motor_speed = 0; }  // cover applied!
-  else if (distance < 200) { fillStrip(strip.Color(255, 100, 100)); idle_tick = 0; motor_speed = 255); } // Red
-  else if (distance < 300) { fillStrip(strip.Color(100, 255, 100)); idle_tick = 0; motor_speed = 100; }
-  else if (distance < 450) { fillStrip(strip.Color(255, 255, 100)); idle_tick = 0; motor_speed = 84); }
-  else if (distance < 600) { fillStrip(strip.Color(255, 255,   0)); idle_tick = 0; motor_speed = 64; } // Yellow
+  else if (distance < 200) { fillStrip(strip.Color(255, 100, 100)); idle_tick = 0; motor_speed = 255; } // Red
+  else if (distance < 300) { fillStrip(strip.Color(100, 255, 100)); idle_tick = 0; motor_speed = 170; }
+  else if (distance < 450) { fillStrip(strip.Color(255, 255, 100)); idle_tick = 0; motor_speed = 130; }
+  else if (distance < 600) { fillStrip(strip.Color(255, 255,   0)); idle_tick = 0; motor_speed = 100; } // Yellow
   else                     { motor_speed = idle(); }
-
   analogWrite(MOTOR_PIN, motor_speed);
   digitalWrite(WS2812_PIN, (blink) ? HIGH : LOW);
   blink = 1 - blink;
