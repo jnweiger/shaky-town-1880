@@ -70,7 +70,7 @@ uint32_t sr04_measure_distance_mm() {
   digitalWrite(SR04_TRIG_PIN, LOW);
 
   // Measure echo pulse duration
-  unsigned long duration = pulseIn(SR04_ECHO_PIN, HIGH, SR04__TIMEOUT_MS * 1000);
+  unsigned long duration = pulseIn(SR04_ECHO_PIN, HIGH, SR04_TIMEOUT_MS * 1000);
 
   // Check for timeout
   if (duration == 0) {
@@ -206,17 +206,21 @@ void fillStrip_3x25(uint32_t *colors) {
 }
 
 // Function to fill the strip with a single color
-void fillStrip(uint32_t color) {
+void fillStripN(uint32_t color) {
   for (int i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, color);
   }
-  strip.show();
 }
 
 /* Loop ----------------------------------------------------------------------*/
 
 int blink = 0;
 uint16_t idle_tick = 0;	// state machine.
+uint16_t busy_tick = 0;
+uint16_t busy_counter = 0;  // incremented by busy(), reset by idle()
+uint16_t force_idle = 0;  // set to FORCE_IDLE_COUNTDOWN when busy_counter reaches MAX_BUSY_COUNTER, decremented by idle();
+#define MAX_BUSY_COUNTER 300    // 300: 30 sec
+#define FORCE_IDLE_COUNTDOWN 800 // 600: 1min
 
 void interpol9col(uint8_t idx1, uint8_t idx2, uint8_t perc, uint32_t *colorp) {
   uint8_t *f1 = &color_fan[9*3*idx1];
@@ -246,6 +250,10 @@ uint8_t idle() {
   uint8_t m = 0;
 
   uint32_t colors[9];
+
+  busy_tick = 0;
+  busy_counter = 0;
+  if (force_idle > 0) force_idle--;
 
   if (idle_tick >= 4*LEDP) idle_tick = 0;
 
@@ -277,6 +285,60 @@ uint8_t idle() {
 }
 
 
+void blinker(uint16_t off, uint8_t d, uint8_t idx, uint8_t width) {
+  uint32_t c = strip.Color(255,0,0);
+  if (busy_tick >= off && busy_tick < off+d) {
+    for (uint8_t i = 0; i < width; i++) {
+      if (idx+i < 75) strip.setPixelColor(idx+i, c);
+    }
+  }
+}
+
+void blinker4(uint16_t off, uint8_t d, uint8_t idx, uint8_t w) {
+  blinker(off+0*d, d, idx+w, w);
+  blinker(off+1*d, d, idx,   w);
+  blinker(off+2*d, d, idx+w, w);
+  blinker(off+3*d, d, idx,   w);
+}
+
+uint8_t busy(uint32_t d) {
+  uint8_t m = 80;
+
+  idle_tick = 0;
+  busy_counter++;
+
+  if      (d < 200) { fillStripN(strip.Color(255,   0,   0)); m = 255; } // Red
+  else if (d < 300) { fillStripN(strip.Color(255, 145,   0)); m = 200; } // orange
+  else if (d < 400) { fillStripN(strip.Color(255, 245,   0)); m = 150; } // yellow
+  else              { fillStripN(strip.Color(255, 255, 255)); m = 100; } // white
+
+  blinker4(10, 5,  2, 5);
+  blinker4(30, 4,  2, 5);
+  blinker4(46, 5,  2, 5);
+
+  blinker4( 8, 3, 22, 3);
+  blinker4(20, 3, 22, 3);
+  blinker4(32, 3, 22, 3);
+
+  blinker4(20, 2, 42, 3);
+  blinker4(28, 2, 42, 3);
+  blinker4(46, 2, 42, 3);
+  blinker4(54, 2, 42, 3);
+
+  blinker4( 0, 4, 62, 4);
+  blinker4(16, 4, 62, 4);
+  blinker4(20, 3, 50, 3);
+  blinker4(32, 3, 50, 3);
+  blinker4(44, 3, 50, 3);
+
+  if (busy_tick > 66) busy_tick = 0;
+
+  strip.show();
+
+  return m;
+}
+
+uint32_t slow_dist = 9999;
 
 void loop() {
   // Led blinking.
@@ -298,22 +360,27 @@ void loop() {
   {
     // Output data.
     char report[64];
-    snprintf(report, sizeof(report), "| Distance [mm]: %ld | sr04: %ld |", distance, dist_sonic);
+    snprintf(report, sizeof(report), "| Distance [mm]: %ld | sr04: %ld | f=%d | b=%d",
+      distance, dist_sonic, force_idle, busy_counter);
     Serial.println(report);
   }
 
   uint8_t motor_speed = 60;
+  if (busy_counter > MAX_BUSY_COUNTER) force_idle = FORCE_IDLE_COUNTDOWN;
+  if (force_idle) distance = 0;
 
-  if (distance == 0)       { motor_speed = idle(); }  		// 0 is infinite;
-  else if (distance <  50) { idle(); motor_speed = 0; }  	// no motor, when cover is very close.
-  else if (distance <  80) { motor_speed = idle(); }  		// cover applied!
-  else if (distance < 200) { fillStrip(strip.Color(255,   0,   0)); idle_tick = 0; motor_speed = 255; } // Red
-  else if (distance < 300) { fillStrip(strip.Color(255, 145,   0)); idle_tick = 0; motor_speed = 170; } // orange
-  else if (distance < 400) { fillStrip(strip.Color(255, 245,   0)); idle_tick = 0; motor_speed = 130; } // yellow
-  else if (distance < 600) { fillStrip(strip.Color(255, 255, 255)); idle_tick = 0; motor_speed = 100; } // white
-  else                     { motor_speed = idle(); }
+  if (slow_dist == 0)       slow_dist = distance; // jump out of zero, without going throgh short distances.
+  if (slow_dist < distance) slow_dist += 10;
+  if (slow_dist > distance) slow_dist = distance; // no else to avoid overshoot
+
+  if (slow_dist == 0)       { motor_speed = idle(); }  		// 0 is infinite;
+  else if (slow_dist <  50) { idle(); motor_speed = 0; }  	// no motor, when cover is very close.
+  else if (slow_dist <  80) { motor_speed = idle(); }  		// cover applied!
+  else if (slow_dist < 600) { motor_speed = busy(slow_dist); } // strong colors and fast motor
+  else                      { motor_speed = idle(); }
   analogWrite(MOTOR_PIN, motor_speed);
   digitalWrite(WS2812_PIN, (blink) ? HIGH : LOW);
   blink = 1 - blink;
   idle_tick++;
+  busy_tick++;
 }
