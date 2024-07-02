@@ -48,6 +48,42 @@ WS2812B strip = WS2812B(NUM_LEDS);
 
 #endif
 
+#define SR04_TIMEOUT_MS 15  	// 15 ms timeout for 2m max distance
+#define SR04_TRIG_PIN	PB8	// need to be 5V tolerant!
+#define SR04_ECHO_PIN	PB7	// need to be 5V tolerant!
+#define SOUND_SPEED	0.343   // mm/microsecond
+
+void sr04_setup() {
+  // Configure pins
+  pinMode(SR04_TRIG_PIN, OUTPUT);
+  pinMode(SR04_ECHO_PIN, INPUT);
+
+  // Ensure trigger pin is low
+  digitalWrite(SR04_TRIG_PIN, LOW);
+}
+
+
+uint32_t sr04_measure_distance_mm() {
+  // Send trigger pulse
+  digitalWrite(SR04_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(SR04_TRIG_PIN, LOW);
+
+  // Measure echo pulse duration
+  unsigned long duration = pulseIn(SR04_ECHO_PIN, HIGH, SR04__TIMEOUT_MS * 1000);
+
+  // Check for timeout
+  if (duration == 0) {
+    return 0;  // Indicate failure
+  }
+
+  // Calculate distance
+  uint32_t distance = (int)((duration * SOUND_SPEED) / 2);
+
+  return distance;
+}
+
+
 // device info is not exposed. Let's subclass ~/Arduino/libraries/STM32duino_VL53L0X/src/vl53l0x_class.h
 class myVL53L0X : public VL53L0X {
   public:
@@ -65,7 +101,7 @@ class myVL53L0X : public VL53L0X {
 
 // Create components.
 // I2C2_SDA=PB11 & I2C2_SCL=PB10
-// I2C1_SDA=PB7  & I2C1_SCL=PB6 (remap I2C1_SDA=PB9 & I2C1_SCL=PB8)
+// I2C1_SDA=PB7  & I2C1_SCL=PB6 (remap I2C1_SDA=PB9 & I2C1_SCL=PB8)	// PB8,PB9 taken by SR04 !
 //TwoWire WIRE1(1, I2C_FAST_MODE);  // PB7, PB6);
 TwoWire WIRE1(2, I2C_FAST_MODE);  // PB11, PB10);
 
@@ -145,6 +181,9 @@ void setup() {
   }
 #endif
 
+  // init ultrasonic sensor
+  sr04_setup();
+
   // Initialize the NeoPixel strip
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
@@ -209,13 +248,13 @@ uint8_t idle() {
   uint32_t colors[9];
 
   if (idle_tick >= 4*LEDP) idle_tick = 0;
-  
+
   uint32_t led_step = idle_tick;
   if      (led_step < 1*LEDP) interpol9col(0, 1, (led_step - 0*LEDP)*100/LEDP, &colors[0]);
   else if (led_step < 2*LEDP) interpol9col(1, 2, (led_step - 1*LEDP)*100/LEDP, &colors[0]);
   else if (led_step < 3*LEDP) interpol9col(2, 3, (led_step - 2*LEDP)*100/LEDP, &colors[0]);
   else if (led_step < 4*LEDP) interpol9col(3, 0, (led_step - 3*LEDP)*100/LEDP, &colors[0]);
-  
+
   fillStrip_3x25(colors);
   // idle_tick counts to 30 * 4 = 120;
   // motor pulse goes to 7 * 3 = 21 -> so ca 1/6 the time its moving.
@@ -251,20 +290,23 @@ void loop() {
   int status;
   status = sensor_vl53l0x.GetDistance(&distance);
 
+  uint32_t dist_sonic = sr04_measure_distance_mm();
+
   digitalWrite(LED_PIN, (distance < 400) ? HIGH : LOW);
 
   if (status == VL53L0X_ERROR_NONE)
   {
     // Output data.
     char report[64];
-    snprintf(report, sizeof(report), "| Distance [mm]: %ld | %ld |", distance);
+    snprintf(report, sizeof(report), "| Distance [mm]: %ld | sr04: %ld |", distance, dist_sonic);
     Serial.println(report);
   }
-  
+
   uint8_t motor_speed = 60;
 
-  if (distance < 10)       { motor_speed = idle(); }  // 0 is infinite. 
-  else if (distance <  50) { idle(); motor_speed = 0; }  // cover applied!
+  if (distance == 0)       { motor_speed = idle(); }  		// 0 is infinite;
+  else if (distance <  50) { idle(); motor_speed = 0; }  	// no motor, when cover is very close.
+  else if (distance <  80) { motor_speed = idle(); }  		// cover applied!
   else if (distance < 200) { fillStrip(strip.Color(255,   0,   0)); idle_tick = 0; motor_speed = 255; } // Red
   else if (distance < 300) { fillStrip(strip.Color(255, 145,   0)); idle_tick = 0; motor_speed = 170; } // orange
   else if (distance < 400) { fillStrip(strip.Color(255, 245,   0)); idle_tick = 0; motor_speed = 130; } // yellow
