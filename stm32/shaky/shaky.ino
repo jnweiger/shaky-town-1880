@@ -339,6 +339,8 @@ uint8_t busy(uint32_t d) {
 }
 
 uint32_t slow_dist = 9999;
+uint16_t sr04_present = 0;
+uint16_t sr04_dist_avg = 0;
 
 void loop() {
   // Led blinking.
@@ -354,6 +356,25 @@ void loop() {
 
   uint32_t dist_sonic = sr04_measure_distance_mm();
 
+  // if the sr04 is present, and it has a reading, then override the reading of the laser sensor.
+  if (dist_sonic > 0 && dist_sonic < 2000)
+    sr04_present = 10;
+  if (sr04_present)
+    {
+      sr04_present--;
+      // this sensor is really noisy. sometimes the measurement fails for 2 or 3 cycles. somtimes the values jump.
+      if (dist_sonic == 0) {
+        distance = slow_dist;
+        sr04_dist_avg = 0;
+      } else {
+        if (sr04_dist_avg == 0) sr04_dist_avg = dist_sonic;
+        else {
+          sr04_dist_avg = (3 * sr04_dist_avg + dist_sonic) >> 2;
+        }
+        distance = sr04_dist_avg;
+      }
+    }
+
   digitalWrite(LED_PIN, (distance < 400) ? HIGH : LOW);
 
   if (status == VL53L0X_ERROR_NONE)
@@ -361,7 +382,7 @@ void loop() {
     // Output data.
     char report[64];
     snprintf(report, sizeof(report), "| Distance [mm]: %ld | sr04: %ld | f=%d | b=%d",
-      distance, dist_sonic, force_idle, busy_counter);
+      distance, sr04_dist_avg, force_idle, busy_counter);
     Serial.println(report);
   }
 
